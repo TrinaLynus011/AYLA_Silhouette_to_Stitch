@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Couture Studio Pro | Digital Twin Simulator</title>
+    <style>
+        :root { --beige-light: #fdfaf5; --beige-med: #e8dcc4; --accent: #8b7355; --gold: #c5a059; }
+        body { margin: 0; background: var(--beige-light); font-family: 'Playfair Display', serif; overflow: hidden; color: #333; }
+        
+        /* Studio UI */
+        #ui-container { position: absolute; inset: 0; display: flex; justify-content: space-between; padding: 40px; pointer-events: none; }
+        .side-panel { pointer-events: auto; background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); padding: 30px; border-radius: 2px; border: 1px solid var(--beige-med); width: 300px; box-shadow: 10px 0 30px rgba(0,0,0,0.05); }
+        
+        h1 { font-size: 18px; letter-spacing: 4px; text-transform: uppercase; border-bottom: 1px solid var(--beige-med); padding-bottom: 15px; margin-bottom: 30px; }
+        .section { margin-bottom: 25px; }
+        label { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; color: var(--accent); }
+        
+        /* Style Selectors */
+        .btn-group { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .style-btn { background: white; border: 1px solid var(--beige-med); padding: 10px; font-size: 11px; cursor: pointer; transition: 0.3s; }
+        .style-btn:hover { background: var(--beige-med); }
+        .style-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+        /* Sliders */
+        input[type=range] { width: 100%; accent-color: var(--accent); height: 2px; outline: none; }
+
+        /* Motif Tray */
+        #motif-tray { position: absolute; right: 40px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 15px; pointer-events: auto; }
+        .motif-tool { width: 60px; height: 60px; background: white; border: 1px solid var(--beige-med); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+        .motif-tool.active { border: 2px solid var(--gold); transform: scale(1.1); }
+
+        #view-footer { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); display: flex; gap: 40px; pointer-events: auto; }
+        .view-link { font-size: 11px; letter-spacing: 2px; text-decoration: none; color: var(--accent); border-bottom: 1px solid transparent; cursor: pointer; }
+        .view-link:hover { border-bottom-color: var(--accent); }
+    </style>
+</head>
+<body>
+
+<div id="ui-container">
+    <div class="side-panel">
+        <h1>Atelier Digital</h1>
+        
+        <div class="section">
+            <label>Digital Twin Adjustments</label>
+            <label>Bust & Shoulder Width</label>
+            <input type="range" id="shoulder-slider" min="0.7" max="1.4" step="0.01" value="1">
+            <label>Waistline Fit</label>
+            <input type="range" id="waist-slider" min="0.6" max="1.3" step="0.01" value="1">
+        </div>
+
+        <div class="section">
+            <label>Sleeve Construction</label>
+            <div class="btn-group">
+                <button class="style-btn active" onclick="setStyle('sleeve', 0.4)">Mega</button>
+                <button class="style-btn" onclick="setStyle('sleeve', 0.8)">Elbow</button>
+                <button class="style-btn" onclick="setStyle('sleeve', 1.5)">Full</button>
+                <button class="style-btn" onclick="setStyle('sleeve', 0.05)">Sleeveless</button>
+            </div>
+        </div>
+
+        <div class="section">
+            <label>Neckline Style</label>
+            <div class="btn-group">
+                <button class="style-btn active" onclick="setStyle('neck', 1)">Round</button>
+                <button class="style-btn" onclick="setStyle('neck', 1.5)">Deep V</button>
+                <button class="style-btn" onclick="setStyle('neck', 0.5)">High Neck</button>
+                <button class="style-btn" onclick="setStyle('neck', 2)">Boat Neck</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="motif-tray">
+        <div class="motif-tool active" onclick="setMotif(this, '✨')">✨</div>
+        <div class="motif-tool" onclick="setMotif(this, '🪞')">🪞</div>
+        <div class="motif-tool" onclick="setMotif(this, '🏵️')">🏵️</div>
+    </div>
+</div>
+
+<div id="view-footer">
+    <span class="view-link" onclick="changeCam('front')">FRONT VIEW</span>
+    <span class="view-link" onclick="changeCam('back')">BACK VIEW</span>
+    <span class="view-link" onclick="changeCam('sleeve')">SLEEVE DETAIL</span>
+</div>
+
+<script type="module">
+    import * as THREE from 'https://cdn.skypack.dev/three@0.136.0';
+    import { OrbitControls } from 'https://cdn.skypack.dev/three@0.136.0/examples/jsm/controls/OrbitControls.js';
+
+    let scene, camera, renderer, controls, mannequin, sleeves, neck;
+    let selectedMotif = '✨';
+
+    init();
+
+    function init() {
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xfdfaf5);
+
+        camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 1.2, 4);
+
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.body.appendChild(renderer.domElement);
+
+        // Bright Studio Lighting
+        const hemi = new THREE.HemisphereLight(0xffffff, 0xe8dcc4, 1);
+        scene.add(hemi);
+        const directional = new THREE.DirectionalLight(0xffffff, 0.8);
+        directional.position.set(5, 10, 7.5);
+        scene.add(directional);
+
+        // Build Professional Mannequin (Modular)
+        createMannequin();
+
+        controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.target.set(0, 0.5, 0);
+
+        // Listeners
+        document.getElementById('shoulder-slider').oninput = (e) => {
+            mannequin.scale.x = e.target.value;
+        };
+        document.getElementById('waist-slider').oninput = (e) => {
+            mannequin.scale.z = e.target.value;
+        };
+        
+        window.addEventListener('mousedown', onCanvasClick);
+        animate();
+    }
+
+    function createMannequin() {
+        mannequin = new THREE.Group();
+        const fabricMat = new THREE.MeshStandardMaterial({ color: 0xe8dcc4, roughness: 0.8 });
+        
+        // Torso
+        const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.4, 1.2, 32), fabricMat);
+        mannequin.add(torso);
+
+        // Neck (Modular)
+        neck = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.02, 16, 100), new THREE.MeshStandardMaterial({color: 0xc5a059}));
+        neck.position.set(0, 0.6, 0.1);
+        neck.rotation.x = Math.PI/2;
+        mannequin.add(neck);
+
+        // Sleeves (Modular)
+        sleeves = new THREE.Group();
+        const sGeo = new THREE.CylinderGeometry(0.12, 0.1, 0.4, 32);
+        const sMeshL = new THREE.Mesh(sGeo, fabricMat);
+        sMeshL.position.set(0.5, 0.4, 0);
+        sMeshL.rotation.z = Math.PI/3;
+        sleeves.add(sMeshL);
+        mannequin.add(sleeves);
+
+        scene.add(mannequin);
+    }
+
+    window.setStyle = (type, val) => {
+        if(type === 'sleeve') sleeves.children[0].scale.y = val;
+        if(type === 'neck') neck.scale.set(val, val, 1);
+        
+        // UI toggle
+        const btns = event.target.parentElement.querySelectorAll('.style-btn');
+        btns.forEach(b => b.classList.remove('active'));
+        event.target.classList.add('active');
+    };
+
+    window.setMotif = (el, icon) => {
+        document.querySelectorAll('.motif-tool').forEach(t => t.classList.remove('active'));
+        el.classList.add('active');
+        selectedMotif = icon;
+    }
+
+    function onCanvasClick(e) {
+        if(e.target.tagName !== 'CANVAS') return;
+        
+        const mouse = new THREE.Vector2(
+            (e.clientX / window.innerWidth) * 2 - 1,
+            -(e.clientY / window.innerHeight) * 2 + 1
+        );
+        
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(mouse, camera);
+        const intersects = raycaster.intersectObject(mannequin, true);
+
+        if(intersects.length > 0) {
+            const p = intersects[0].point;
+            // Create "Chamki" (Sequin/Motif)
+            const chamki = new THREE.Mesh(
+                new THREE.SphereGeometry(0.015, 8, 8),
+                new THREE.MeshStandardMaterial({ color: 0xc5a059, metalness: 0.8, roughness: 0.2 })
+            );
+            chamki.position.copy(p);
+            mannequin.add(chamki); // Pins it to the mannequin
+        }
+    }
+
+    window.changeCam = (view) => {
+        const v = { front: [0, 1.2, 4], back: [0, 1.2, -4], sleeve: [1.2, 1.0, 1.5] };
+        camera.position.set(...v[view]);
+        controls.update();
+    }
+
+    function animate() {
+        requestAnimationFrame(animate);
+        controls.update();
+        renderer.render(scene, camera);
+    }
+</script>
+</body>
+</html>
